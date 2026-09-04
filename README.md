@@ -114,11 +114,14 @@ mode.
 
 ## Restarting
 
-The compose file ships `pixagram` and `hivemind` with `restart: "no"`, matching
-upstream. That means a host reboot brings the box back with HAF, Jussi and
-Caddy healthy and **hived not running**. It looks fine and serves stale data.
-If you run this unattended, either change those to `unless-stopped` or add a
-boot unit that runs `docker compose up -d`.
+Every long-running service is `unless-stopped`, so the stack comes back by
+itself after a host reboot. `init_permissions` and `hivemind_setup` stay at
+`no` because they are one-shot.
+
+Upstream ships `pixagram` and `hivemind` without any restart policy, which
+docker treats as `no`. That is worth knowing if you compare against other
+deployments: a reboot brings such a box back with HAF, Jussi and Caddy healthy
+and hived not running, which looks fine and serves nothing.
 
 Jussi is nginx, which resolves its upstreams when it parses its config and hard
 -fails if Hivemind is not up yet. It recovers on its own through its restart

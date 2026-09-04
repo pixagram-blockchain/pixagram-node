@@ -69,6 +69,11 @@ services:
       nofile:
         soft: 1048576
         hard: 1048576
+
+    # Without this hived does not come back after a host reboot: HAF, jussi and
+    # caddy restart, the box looks healthy, and the node quietly serves nothing.
+    restart: unless-stopped
+
     networks:
       - backend
 
@@ -155,6 +160,7 @@ services:
       - POSTGRES_URL=postgresql://hivemind@pixagram_haf:5432/haf_block_log
       - POSTGRES_ADMIN_URL=postgresql://haf_admin@pixagram_haf:5432/haf_block_log
       - PGRST_DB_ROOT_SPEC=home
+    restart: unless-stopped
     networks:
       - backend
 
