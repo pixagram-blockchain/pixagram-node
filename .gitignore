@@ -1,0 +1,27 @@
+# Secrets. Nothing here should ever reach the repository.
+.env
+*.wif
+*.key
+
+# hived datadir contents - chain state, logs, peer lists
+pixagram/blockchain/
+pixagram/p2p/
+pixagram/logs/
+pixagram/snapshot/
+pixagram/*.log
+
+# HAF datadir contents - chain state plus the PostgreSQL cluster
+pixagram-haf/blockchain/
+pixagram-haf/haf_db_store/
+pixagram-haf/p2p/
+pixagram-haf/logs/
+pixagram-haf/snapshot/
+pixagram-haf/*.log
+
+# Local overrides
+docker-compose.override.yml
+*.local
+
+# Editor / OS noise
+.DS_Store
+*.swp

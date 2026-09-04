@@ -1,0 +1,17 @@
+# The site address comes from SITE_ADDRESS in your .env file.
+#
+# It deliberately defaults to :80 rather than a real hostname. A hardcoded
+# domain in a public template means every person who clones this and runs it
+# unedited sends Caddy off to get a Let's Encrypt certificate for a domain they
+# do not control. Those failures count against that domain's rate limits, so a
+# popular template can lock its own operator out of renewing.
+#
+# With the default you get plain HTTP on port 80 and no ACME traffic at all.
+# Set SITE_ADDRESS to your own hostname and Caddy will obtain and renew a
+# certificate for it automatically:
+#
+#   echo 'SITE_ADDRESS=api.example.com' >> .env
+#
+{$SITE_ADDRESS::80} {
+	reverse_proxy jussi_container:8080
+}

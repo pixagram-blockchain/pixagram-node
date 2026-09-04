@@ -1,0 +1,11 @@
+Drop .conf files here to override HAF's PostgreSQL settings. The directory is
+bind-mounted into the HAF container and read after its shipped configuration,
+so anything set here wins.
+
+HAF ships shared_buffers at 16 GiB, tuned for full Hive. On a Pixagram node the
+database is a fraction of that, and Postgres will refuse to start if it cannot
+reserve the memory. Below roughly 24 GB of RAM, create local.conf here:
+
+  shared_buffers = 2GB
+  effective_cache_size = 4GB
+  maintenance_work_mem = 512MB

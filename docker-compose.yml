@@ -1,0 +1,199 @@
+services:
+  init_permissions:
+    image: alpine:3.20
+    container_name: pixagram_init_permissions
+    user: "0:0"
+    volumes:
+      - ./pixagram:/home/hived/datadir
+      - ./pixagram-haf:/home/hived/haf_datadir
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        chown -R 1000:1000 /home/hived/datadir
+        chown 1000:1000 /home/hived/haf_datadir
+        find /home/hived/haf_datadir -maxdepth 1 -mindepth 1 ! -name haf_db_store -exec chown -R 1000:1000 {} +
+    restart: "no"
+    networks:
+      - backend
+
+  hivemind_setup:
+    image: pixadock/hivemind:mainnet
+    container_name: hivemind_setup
+    depends_on:
+      init_permissions:
+        condition: service_completed_successfully
+      pixagram_haf:
+        condition: service_healthy
+    command:
+      - setup
+      - --with-apps
+    environment:
+      - POSTGRES_URL=postgresql://hivemind@pixagram_haf:5432/haf_block_log
+      - POSTGRES_ADMIN_URL=postgresql://haf_admin@pixagram_haf:5432/haf_block_log
+    restart: "no"
+    networks:
+      - backend
+
+  pixagram:
+    image: pixadock/pixagram:mainnet
+    container_name: pixagram_container
+
+    depends_on:
+      init_permissions:
+        condition: service_completed_successfully
+
+    entrypoint:
+      - /bin/bash
+      - -lc
+      # HIVED_EXTRA_ARGS lets you pass one-off flags without editing this file,
+      # e.g. a replay after enabling a plugin:
+      #   rm pixagram/blockchain/shared_memory.bin
+      #   HIVED_EXTRA_ARGS=--replay-blockchain docker compose up -d pixagram
+      - ulimit -n 1048576; exec /home/hived/docker_entrypoint.sh /home/hived/bin/hived ${HIVED_EXTRA_ARGS:-}
+
+    ports:
+      - "7777:7777"  # HTTP
+      - "2001:2001"  # P2P (direct to internet)
+
+    volumes:
+      - ./pixagram:/home/hived/datadir
+      # make sure this maps to DATADIR in the image’s ENV
+
+    # (optional) if the entrypoint script relies on environment vars:
+    environment:
+      - DATADIR=/home/hived/datadir
+      - SHM_DIR=/home/hived/datadir/blockchain
+      - HTTP_PORT=7777
+      - HIVED_UID=1000
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+    networks:
+      - backend
+
+  pixagram_haf:
+    image: pixadock/pixagram-haf:mainnet
+    container_name: pixagram_haf_container
+
+    depends_on:
+      init_permissions:
+        condition: service_completed_successfully
+      pixagram:
+        condition: service_started
+
+    entrypoint: /home/hived/datadir/entrypoint_wrapper.sh
+    command:
+      - --p2p-seed-node=pixagram:2001
+
+    ports:
+      - "7779:7778"  # HTTP
+      - "8092:8092"  # WS
+      - "2002:2002"  # P2P (direct to internet)
+
+    volumes:
+      - ./pixagram-haf:/home/hived/datadir
+
+    environment:
+      - DATADIR=/home/hived/datadir
+      - SHM_DIR=/home/hived/datadir/blockchain
+      - HTTP_PORT=7778
+      - WS_PORT=8092
+      - P2P_PORT=2002
+      - HIVED_UID=1000
+      - PG_ACCESS=local haf_block_log haf_maintainer trust\nhost haf_block_log haf_app_admin 172.0.0.0/8 trust\nhost haf_block_log haf_admin 172.0.0.0/8 trust\nhost haf_block_log hivemind 172.0.0.0/8 trust\nhost all pghero 172.0.0.0/8 trust
+
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep hived >/dev/null 2>&1 && psql -U haf_admin -d haf_block_log -c 'SELECT 1' >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 120
+      start_period: 120s
+    restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+    networks:
+      - backend
+
+  hivemind_sync:
+    image: pixadock/hivemind:mainnet
+    container_name: hivemind_sync_container
+    depends_on:
+      hivemind_setup:
+        condition: service_completed_successfully
+      pixagram_haf:
+        condition: service_started
+    command:
+      - sync
+      - --community-start-block=1
+    environment:
+      - POSTGRES_URL=postgresql://hivemind@pixagram_haf:5432/haf_block_log
+      - POSTGRES_ADMIN_URL=postgresql://haf_admin@pixagram_haf:5432/haf_block_log
+      - COMMUNITY_START_BLOCK=1
+    restart: unless-stopped
+    networks:
+      - backend
+
+  hivemind:
+    image: pixadock/hivemind:mainnet
+    container_name: hivemind_container
+    depends_on:
+      hivemind_setup:
+        condition: service_completed_successfully
+      pixagram_haf:
+        condition: service_started
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        psql "$$POSTGRES_ADMIN_URL" -c "DROP FUNCTION IF EXISTS hivemind_endpoints.home();" 2>/dev/null
+        exec /home/hivemind/docker_entrypoint.sh server
+    ports:
+      - "7778:8080"  # HTTP
+    environment:
+      - POSTGRES_URL=postgresql://hivemind@pixagram_haf:5432/haf_block_log
+      - POSTGRES_ADMIN_URL=postgresql://haf_admin@pixagram_haf:5432/haf_block_log
+      - PGRST_DB_ROOT_SPEC=home
+    networks:
+      - backend
+
+  jussi:
+    image: openresty/openresty:alpine
+    container_name: jussi_container
+    expose:
+      - "8080"
+    volumes:
+      - ./jussi/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro
+    restart: unless-stopped
+    networks:
+      - backend
+
+  ssl-proxy:
+    image: caddy:alpine
+    container_name: ssl_proxy_container
+    depends_on:
+      - jussi
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./ssl-proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      # Your public hostname, e.g. SITE_ADDRESS=api.example.com in .env.
+      # Defaults to :80 (plain HTTP, no ACME) so an unedited clone never tries
+      # to get a certificate for someone else's domain.
+      - SITE_ADDRESS=${SITE_ADDRESS:-:80}
+    restart: unless-stopped
+    networks:
+      - backend
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+networks:
+  backend:
+    driver: bridge
