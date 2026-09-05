@@ -12,6 +12,21 @@
 #
 #   echo 'SITE_ADDRESS=api.example.com' >> .env
 #
+# HTTP/3 is deliberately off. Caddy would otherwise advertise `alt-svc: h3` on
+# every response, but QUIC never reaches it: docker-compose.yml publishes 443
+# as TCP only and most hosts' firewalls pass TCP 443 only. Browsers that honour
+# the hint (Firefox, most phones) then wait out a QUIC handshake on every
+# request before falling back, which makes the API look down for them.
+# `Alt-Svc: clear` makes browsers that already cached the hint drop it.
+# To enable HTTP/3 for real: remove this block, publish "443:443/udp" in
+# docker-compose.yml and allow udp/443 in your firewall.
+{
+	servers {
+		protocols h1 h2
+	}
+}
+
 {$SITE_ADDRESS::80} {
+	header Alt-Svc clear
 	reverse_proxy jussi_container:8080
 }
