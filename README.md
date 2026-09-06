@@ -27,6 +27,66 @@ Hive-derived field names on the wire so clients see Pixagram ones
 | `jussi` | `openresty/openresty:alpine` | Request routing, field translation |
 | `ssl-proxy` | `caddy:alpine` | TLS termination, automatic certificates |
 
+## Required: a synchronised clock
+
+Run an NTP daemon on this machine. An API node does not produce blocks, so a
+drifting clock will not cost you missed blocks directly — but this node is a P2P
+peer that relays blocks onward, and it stamps every response it serves. A node
+that is seconds out of step relays late and reports a view of the chain that
+disagrees with everyone else's.
+
+It matters far more if you ever add a witness to this stack. Block slots are 3
+seconds; a witness whose clock is a second or two slow emits its block at the
+boundary of the *next* witness's slot, and that witness — not the one with the
+bad clock — is the one recorded as missing a block. On this network a single
+witness running 2.672 s slow caused 121 of 123 same-height block collisions and
+109 missed blocks for one unlucky peer.
+
+**Check:**
+
+```bash
+timedatectl | grep -E 'synchronized|NTP service'
+```
+
+Ubuntu ships `systemd-timesyncd` enabled. **Debian cloud images frequently ship
+with no time daemon at all.** If yours has none:
+
+```bash
+sudo apt-get update && sudo apt-get install -y chrony
+sudo systemctl enable --now chrony
+```
+
+**Verify the real offset** from the machine itself — comparing `date` over SSH
+measures your connection latency, not your clock:
+
+```bash
+python3 - <<'PY'
+import socket, struct, time, statistics
+def probe(host):
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.settimeout(4)
+    try:
+        t1 = time.time(); s.sendto(b'\x1b' + 47 * b'\0', (host, 123))
+        d, _ = s.recvfrom(1024); t4 = time.time()
+    finally:
+        s.close()
+    u = struct.unpack('!12I', d[:48])
+    t2 = u[8] + u[9] / 2**32 - 2208988800
+    t3 = u[10] + u[11] / 2**32 - 2208988800
+    return ((t2 - t1) + (t3 - t4)) / 2
+offsets = []
+for host in ('pool.ntp.org', 'time.google.com', 'time.cloudflare.com'):
+    for _ in range(3):
+        try: offsets.append(probe(host))
+        except Exception: pass
+print(f'clock offset: {statistics.median(offsets):+.4f}s  ({len(offsets)} samples)'
+      if offsets else 'could not reach any NTP server')
+PY
+```
+
+Under ~50 ms is fine.
+
+---
+
 ## Sizing
 
 Measured on a production node at 1.75M blocks, two weeks of uptime.
