@@ -35,7 +35,7 @@ services:
       - backend
 
   pixagram:
-    image: pixadock/pixagram:mainnet
+    image: pixadock/pixagram:1.29.0
     container_name: pixagram_container
 
     depends_on:
@@ -78,7 +78,7 @@ services:
       - backend
 
   pixagram_haf:
-    image: pixadock/pixagram-haf:mainnet
+    image: pixadock/pixagram-haf:1.29.0
     container_name: pixagram_haf_container
 
     depends_on:
