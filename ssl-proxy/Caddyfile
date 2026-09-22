@@ -28,5 +28,6 @@
 
 {$SITE_ADDRESS::80} {
 	header Alt-Svc clear
+	encode zstd gzip
 	reverse_proxy jussi_container:8080
 }
