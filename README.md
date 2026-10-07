@@ -19,8 +19,8 @@ Hive-derived field names on the wire so clients see Pixagram ones
 
 | Service | Image | Purpose |
 |---|---|---|
-| `pixagram` | `pixadock/pixagram:1.29.0` | Consensus node (hived) |
-| `pixagram_haf` | `pixadock/pixagram-haf:1.29.0` | HAF node — hived plus PostgreSQL |
+| `pixagram` | `pixadock/pixagram:1.30.0` | Consensus node (hived) |
+| `pixagram_haf` | `pixadock/pixagram-haf:1.30.0` | HAF node — hived plus PostgreSQL |
 | `hivemind_setup` | `pixadock/hivemind:mainnet` | One-shot schema and role creation |
 | `hivemind_sync` | `pixadock/hivemind:mainnet` | Block processor |
 | `hivemind` | `pixadock/hivemind:mainnet` | PostgREST social API |
@@ -206,10 +206,35 @@ Both steps are needed when enabling a plugin that adds a chainbase index:
 keeping the state file gives you "Inconsistency occurs. A new index is created",
 and skipping the replay gives you "Headblock and statefile are inconsistent".
 
+### To 1.30.0 (hardfork 30)
+
+Hardfork 30 activated on **2026-10-07 12:00:00 UTC** at block 949330. Every hived on the
+network - API nodes included - must run 1.30.0; a node left on 1.29.0 applies the old rules
+after that block and drifts from the network. The procedure is the same as for 1.29.0 below:
+
+```bash
+git pull                                            # 1.30.0 tags in docker-compose.yml
+docker compose pull pixagram pixagram_haf
+
+# 1. consensus node: rebuild the state file from block_log, then start normally
+docker compose stop pixagram
+HIVED_EXTRA_ARGS="--force-replay --exit-before-sync" docker compose run --rm --no-deps pixagram
+docker compose up -d pixagram
+
+# 2. HAF + Hivemind: drop derived state and let them resync together
+docker compose stop pixagram_haf hivemind_sync hivemind hivemind_setup
+docker compose rm -f pixagram_haf hivemind_sync hivemind hivemind_setup
+sudo rm -rf pixagram-haf/haf_db_store pixagram-haf/blockchain pixagram-haf/logs pixagram-haf/p2p
+docker compose up -d
+
+# 3. Jussi keeps the old Hivemind address and answers 502 on bridge.* until restarted
+docker compose restart jussi
+```
+
 ### To 1.29.0 (hardfork 29)
 
-Hardfork 29 activates on **2026-09-18 12:00:00 UTC**. Every hived on the network - API
-nodes included - must run 1.29.0 before then; after activation the network rejects blocks
+Hardfork 29 activated on **2026-09-18 12:00:00 UTC** at block 402205. Every hived on the network - API
+nodes included - had to run 1.29.0 before then; after activation the network rejects blocks
 and state produced by older versions.
 
 hived stamps its build configuration into `shared_memory.bin` and refuses a state file
