@@ -19,11 +19,11 @@ Hive-derived field names on the wire so clients see Pixagram ones
 
 | Service | Image | Purpose |
 |---|---|---|
-| `pixagram` | `pixadock/pixagram:1.30.0` | Consensus node (hived) |
-| `pixagram_haf` | `pixadock/pixagram-haf:1.30.0` | HAF node — hived plus PostgreSQL |
-| `hivemind_setup` | `pixadock/hivemind:mainnet` | One-shot schema and role creation |
-| `hivemind_sync` | `pixadock/hivemind:mainnet` | Block processor |
-| `hivemind` | `pixadock/hivemind:mainnet` | PostgREST social API |
+| `pixagram` | `pixadock/pixagram:1.30.1` | Consensus node (hived) |
+| `pixagram_haf` | `pixadock/pixagram-haf:1.30.1` | HAF node — hived plus PostgreSQL |
+| `hivemind_setup` | `pixadock/hivemind:1.28.8` | One-shot schema and role creation |
+| `hivemind_sync` | `pixadock/hivemind:1.28.8` | Block processor |
+| `hivemind` | `pixadock/hivemind:1.28.8` | PostgREST social API |
 | `jussi` | `openresty/openresty:alpine` | Request routing, field translation |
 | `ssl-proxy` | `caddy:alpine` | TLS termination, automatic certificates |
 
@@ -205,6 +205,30 @@ docker compose up -d
 Both steps are needed when enabling a plugin that adds a chainbase index:
 keeping the state file gives you "Inconsistency occurs. A new index is created",
 and skipping the replay gives you "Headblock and statefile are inconsistent".
+
+### To 1.30.1
+
+1.30.1 is a maintenance release without a hardfork, so 1.30.0 and 1.30.1 nodes run side by side.
+Hivemind 1.28.8 needs the new HAF, so HAF and Hivemind resync together:
+
+```bash
+git pull                                            # 1.30.1 tags in docker-compose.yml
+docker compose pull
+
+# 1. consensus node: rebuild the state file from block_log, then start normally
+docker compose stop pixagram
+HIVED_EXTRA_ARGS="--force-replay --exit-before-sync" docker compose run --rm --no-deps pixagram
+docker compose up -d pixagram
+
+# 2. HAF + Hivemind: drop derived state and let them resync together
+docker compose stop pixagram_haf hivemind_sync hivemind hivemind_setup
+docker compose rm -f pixagram_haf hivemind_sync hivemind hivemind_setup
+sudo rm -rf pixagram-haf/haf_db_store pixagram-haf/blockchain pixagram-haf/logs pixagram-haf/p2p
+docker compose up -d
+
+# 3. Jussi keeps the old Hivemind address and answers 502 on bridge.* until restarted
+docker compose restart jussi
+```
 
 ### To 1.30.0 (hardfork 30)
 
