@@ -1,0 +1,19 @@
+[Unit]
+Description=Pixagram API node: restart a part that has stopped keeping up (watchdog/watchdog.mjs)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# Where this repository is cloned, twice. Use `which node` if yours isn't in /usr/bin.
+WorkingDirectory=/opt/pixagram-node
+ExecStart=/usr/bin/node /opt/pixagram-node/watchdog/watchdog.mjs
+# Where alerts go and anything else you've set: see watchdog.env.example. Fine if it doesn't exist.
+EnvironmentFile=-/etc/pixa-node-watch.env
+# What it found and did: /var/lib/pixa-node-watch/state.json and log.jsonl. Nothing secret is written there.
+StateDirectory=pixa-node-watch
+StateDirectoryMode=0755
+UMask=0022
+# The longest thing it does is recreate the whole stack, each container given two minutes to stop cleanly.
+TimeoutStartSec=1100
+Nice=10
