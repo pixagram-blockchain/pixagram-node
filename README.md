@@ -187,6 +187,14 @@ Jussi is nginx, which resolves its upstreams when it parses its config and hard
 -fails if Hivemind is not up yet. It recovers on its own through its restart
 policy, but expect it to flap for up to a minute after a cold start.
 
+## Watching it
+
+A restart policy brings back a service that exits. It does nothing for one that is still running and has stopped
+keeping up, which is how a Hivemind index can serve the same newest post for hours while every container stays
+up. [`watchdog/`](watchdog/) is one small script for that case: once a minute it compares the chain's head
+with how far HAF and Hivemind have got, restarts the part that has fallen behind, and tells you. It never
+replays or resyncs. Its README has the rest.
+
 ## Upgrading
 
 `block_log*` is the chain itself — never delete it. Everything else under
